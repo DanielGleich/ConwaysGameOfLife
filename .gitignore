@@ -1,0 +1,7 @@
+moc_*
+*.pro.user
+*.o
+debug/
+release/
+Makefile
+Makefile.*
