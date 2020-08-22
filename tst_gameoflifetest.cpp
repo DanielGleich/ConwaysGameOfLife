@@ -29,6 +29,7 @@ private slots:
   void checkFourthRule();
   void checkThreeSteps();
   void checkThreeStepsTorus();
+  void checkAgeMap();
 
 private:
   void compareFields(CELLSTATE *field)
@@ -36,6 +37,13 @@ private:
     for(int x = 0; x < game->getFieldWidth(); x++)
       for(int y = 0; y < game->getFieldHeight(); y++)
         QCOMPARE(game->getField(x,y),field[y*game->getFieldWidth()+x]);
+  }
+
+  void compareAgeMap(int *field)
+  {
+    for(int x = 0; x < game->getFieldWidth(); x++)
+      for(int y = 0; y < game->getFieldHeight(); y++)
+        QCOMPARE(game->getAgeMapField(x,y),field[y*game->getFieldWidth()+x]);
   }
 };
 
@@ -193,12 +201,8 @@ void GameOfLifeTest::checkFirstRule()
 void GameOfLifeTest::checkSecondRule()
 {
   game->setMapSize(3,3);
-  game->setTorus(true);
   game->setField(0,0,ALIVE);
   game->setField(1,1,ALIVE);
-  qDebug() << game->countNeighbors(1,0);
-  game->printCurrentField();
-  game->printNextField();
   game->nextFrame();
 
   CELLSTATE field[] = {DEAD,DEAD,DEAD,
@@ -210,7 +214,6 @@ void GameOfLifeTest::checkSecondRule()
 void GameOfLifeTest::checkThirdRule()
 {
   game->setMapSize(3,3);
-  game->setTorus(true);
   game->setField(0,0,ALIVE);
   game->setField(1,0,ALIVE);
   game->setField(2,0,ALIVE);
@@ -235,7 +238,6 @@ void GameOfLifeTest::checkThirdRule()
 void GameOfLifeTest::checkFourthRule()
 {
   game->setMapSize(3,3);
-  game->setTorus(true);
   for(int x = 0 ; x < 3; x++)
     for(int y = 0; y < 3; y++)
       game->setField(x,y,ALIVE);
@@ -302,6 +304,49 @@ void GameOfLifeTest::checkThreeStepsTorus()
                         ALIVE,ALIVE,ALIVE,ALIVE,DEAD,
                         ALIVE,DEAD,ALIVE,DEAD,ALIVE};
   compareFields(field2);
+}
+
+void GameOfLifeTest::checkAgeMap()
+{
+  int field[] = {0,0,0,0,0,
+                 0,0,0,0,0,
+                 0,1,1,1,0,
+                 0,0,0,0,0,
+                 0,0,0,0,0};
+
+  game->setTorus(false);
+  game->setAging(true);
+  game->setMapSize(5,5);
+  game->setMinAge(3);
+  game->setMaxAge(4);
+
+
+  game->setField(1,2,ALIVE);
+  game->setField(2,2,ALIVE);
+  game->setField(3,2,ALIVE);
+
+  game->printAgeMap();
+  compareAgeMap(field);
+
+  int field2[] = {0,0,0,0,0,
+                  0,0,1,0,0,
+                  0,0,2,0,0,
+                  0,0,1,0,0,
+                  0,0,0,0,0};
+
+  game->nextFrame();
+  game->printAgeMap();
+  compareAgeMap(field2);
+
+  int field3[] = {0,0,0,0,0,
+                  0,0,0,0,0,
+                  0,1,3,1,0,
+                  0,0,0,0,0,
+                  0,0,0,0,0};
+
+  game->nextFrame();
+  game->printAgeMap();
+  compareAgeMap(field3);
 }
 
 QTEST_APPLESS_MAIN(GameOfLifeTest)

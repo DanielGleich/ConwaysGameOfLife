@@ -5,7 +5,11 @@ Game::Game(QObject* parent)
 {
   currentHeight = FIELDHEIGHT;
   currentWidth = FIELDWIDTH;
+  min_age = MIN_AGE;
+  max_age = MAX_AGE;
   isTorus = TORUS;
+  isAging = AGING;
+  isEndless = ENDLESS_MODE;
   reset();
 
 }
@@ -32,11 +36,23 @@ CELLSTATE*Game::getCurrentField() const
 CELLSTATE Game::getField(int x, int y) const
 { return currentField[getIndex(x,y)]; }
 
+int Game::getAgeMapField(int x, int y) const
+{ return ageMap[getIndex(x,y)]; }
+
+int Game::getMinAge()
+{ return min_age; }
+
+int Game::getMaxAge()
+{ return max_age; }
+
 bool Game::isTorusMode() const
 { return isTorus; }
 
 void Game::setField(int x, int y, CELLSTATE status)
-{ currentField[getIndex(x,y)] = status; }
+{
+  currentField[getIndex(x,y)] = status;
+  if(isAging) ageMap[getIndex(x,y)] = status == ALIVE ? 1 : 0;
+}
 
 void Game::setMapSize(int width, int height)
 {
@@ -57,6 +73,25 @@ void Game::setTorus(int state)
   else isTorus = true;
 }
 
+void Game::setMinAge(int age)
+{
+  if (age >= max_age)
+    min_age = max_age;
+  else min_age = age;
+}
+
+void Game::setMaxAge(int age)
+{
+  if (age <= min_age)
+    max_age = min_age;
+  else max_age = age;
+}
+
+void Game::setAging(bool state)
+{ isAging = state; }
+
+void Game::setEndlessMode(bool state)
+{ isEndless = state; }
 
 void Game::printCurrentField() const
 {
@@ -90,6 +125,22 @@ void Game::printNextField() const
   qDebug() << "";
 }
 
+void Game::printAgeMap() const
+{
+  qDebug() << "Agemap";
+  for (int y = currentHeight-1; y >= 0; y--)
+    {
+      QString row = "";
+      for (int x = 0; x < currentWidth; x++)
+        {
+          QString cellstate = QString::number(getAgeMapField(x,y));
+          row.append(cellstate);
+        }
+      qDebug() << row;
+    }
+  qDebug() << "";
+}
+
 void Game::clearCurrentField()
 {
   for (int x = 0; x < currentWidth; x++)
@@ -105,11 +156,32 @@ void Game::clearNextField()
       nextField[getIndex(x,y)] = DEAD;
 }
 
+void Game::clearAgeMap()
+{
+  for(int x = 0; x < currentWidth; x++)
+    for(int y = 0; y < currentHeight; y++)
+      ageMap[getIndex(x,y)] = 0;
+}
+
 void Game::isFieldEmpty()
 {
   for(int i=0; i<getFieldSize();i++)
-    if(currentField[i] == ALIVE) return;
+    if(currentField[i] != DEAD) return;
   randomField();
+}
+
+CELLSTATE Game::aliveAfterAging(int x, int y)
+{
+  int *ageCell = &ageMap[getIndex(x,y)];
+  srand(time(NULL));
+  int random = rand()%3;
+  bool state = random == 0? false : true;
+  if (state) return ALIVE;
+  else
+    {
+      *ageCell = 0;
+      return DEAD;
+    }
 }
 
 int Game::countNeighbors(int x, int y) const
@@ -134,7 +206,7 @@ int Game::countNeighbors(int x, int y) const
             if(torusY < 0)
               torusY += currentHeight;
 
-            if(currentField[getIndex(torusX,torusY)] == ALIVE) i++;
+            if(currentField[getIndex(torusX,torusY)] != DEAD) i++;
           }
     }
   else
@@ -145,7 +217,7 @@ int Game::countNeighbors(int x, int y) const
             int actualX = x + xOffset;
             int actualY = y + yOffset;
             if(xOffset == 0 && yOffset == 0) continue;
-            else if(isValidField(actualX,actualY) && currentField[getIndex(actualX,actualY)] == ALIVE) i++;
+            else if(isValidField(actualX,actualY) && currentField[getIndex(actualX,actualY)] != DEAD) i++;
           }
     }
   return i;
@@ -159,27 +231,49 @@ bool Game::isValidField(int x, int y) const
   return true;
 }
 
-CELLSTATE Game::cellstateForNextFrame(int x, int y) const
+CELLSTATE Game::cellstateForNextFrame(int x, int y)
 {
   CELLSTATE cell = getField(x,y);
   int neighbors = countNeighbors(x,y);
-  if (cell == DEAD && neighbors == 3) return ALIVE;                            // REGEL 1
-  else if (cell == ALIVE && neighbors < 2) return DEAD;                        // REGEL 2
-  else if (cell == ALIVE && neighbors > 1 && neighbors < 4) return ALIVE;      // REGEL 3
-  else if (cell == ALIVE && neighbors > 3) return DEAD;                        // REGEL 4
-  else return DEAD;
+
+  if (cell == DEAD && neighbors == 3 || cell != DEAD && neighbors > 1 && neighbors < 4)
+    {
+      ageMap[getIndex(x,y)]++;
+      return ALIVE;
+    }
+  else
+    {
+      ageMap[getIndex(x,y)] = 0;
+      return DEAD;
+    }
 }
 
 void Game::nextFrame()
 {
+
   for (int y = 0; y < currentHeight; y++)
     for(int x = 0 ; x < currentWidth; x++)
-        nextField[getIndex(x,y)] = cellstateForNextFrame(x,y);
+      nextField[getIndex(x,y)] = cellstateForNextFrame(x,y);
+  if(isAging)
+    {
+      for (int y = 0; y < currentHeight; y++)
+        for(int x = 0 ; x < currentWidth; x++)
+          {
+            if (ageMap[getIndex(x,y)] > max_age)
+              {
+                ageMap[getIndex(x,y)] = 0;
+                nextField[getIndex(x,y)] = DEAD;
+              }
+            else if (ageMap[getIndex(x,y)] > min_age) nextField[getIndex(x,y)] = aliveAfterAging(x,y);
+          }
+    }
+  delete currentField;
   currentField = nextField;
+  nextField = nullptr;
   nextField = new CELLSTATE[currentHeight*currentWidth];
   clearNextField();
+  if (isEndless) isFieldEmpty();
   emit fieldChanged();
-  if(ENDLESSMODE) isFieldEmpty();
 }
 
 void Game::randomField()
@@ -193,12 +287,16 @@ void Game::reset()
 {
   delete currentField;
   delete nextField;
+  delete ageMap;
   currentField = nullptr;
   nextField = nullptr;
+  ageMap = nullptr;
 
   currentField = new CELLSTATE[currentHeight*currentWidth];
   nextField = new CELLSTATE[currentHeight*currentWidth];
+  ageMap = new int[currentHeight*currentWidth];
 
   clearCurrentField();
   clearNextField();
+  clearAgeMap();
 }
